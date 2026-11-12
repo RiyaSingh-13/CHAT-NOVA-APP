@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Chat Nova",
+    "slug": "chat-nova",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.chatnova.mobile"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Chat Nova uses your photos to send images in chats and update your profile picture."
+        }
+      ]
+    ]
+  }
+}

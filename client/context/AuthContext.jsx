@@ -1,0 +1,122 @@
+import React, { useState, useEffect, createContext } from "react";
+import toast from "react-hot-toast";
+import axios from "axios";
+import { io } from "socket.io-client";
+
+const backendUrl =
+  import.meta.env.VITE_BACKEND_URL?.includes("chat-nova-f.vercel.app")
+    ? "https://chat-nova-bk.onrender.com"
+    : import.meta.env.VITE_BACKEND_URL ||
+      (import.meta.env.DEV ? "http://localhost:5000" : "https://chat-nova-bk.onrender.com");
+
+axios.defaults.baseURL = backendUrl;
+
+export const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [token, setToken] = useState(localStorage.getItem("token") || null);
+  const [authUser, setAuthUser] = useState(null);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [socket, setSocket] = useState(null);
+
+  // check if user is authenticated or not,so if so ,set the user data and connect the socket
+  const checkAuth = async () => {
+    try {
+      const { data } = await axios.get("/api/auth/check", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (data.success) {
+        setAuthUser(data.user);
+        connectSocket(data.user);
+      }
+    } catch (error) {
+      setAuthUser(null);
+      setToken(null);
+      localStorage.removeItem("token");
+      toast.error("Session expired. Please log in again.");
+    }
+  };
+  // login fucntion to handle user authentication and socket connection
+
+  const Login = async (state, credentials) => {
+    try {
+      const { data } = await axios.post(`/api/auth/${state}`, credentials);
+      if (data.success) {
+        const user = data.user || data.userData;
+        setAuthUser(user);
+        connectSocket(user);
+        axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
+        setToken(data.token);
+        localStorage.setItem("token", data.token);
+        toast.success(data.message);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+  // logout function to handle user logout and socket disconnection
+  const Logout = async () => {
+    localStorage.removeItem("token");
+    setAuthUser(null);
+    setToken(null);
+    setOnlineUsers([]);
+    delete axios.defaults.headers.common["Authorization"];
+    toast.success("Logged out successfully");
+    socket?.disconnect();
+  };
+  // upate  profile function to handle user profile update and socket reconnection to update the online users
+
+  const updateProfile = async (body) => {
+    try {
+      const { data } = await axios.put("/api/auth/update-profile", body);
+      if (data.success) {
+        setAuthUser(data.user);
+        toast.success("Profile updated successfully");
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  // connect socket function to handle socket connection and online user update
+
+  const connectSocket = (userData) => {
+    if (!userData || socket?.connected) return;
+    console.log("[Socket] Connecting with userId:", userData._id);
+    const newSocket = io(backendUrl, {
+      query: { userId: userData._id },
+    });
+    newSocket.connect();
+    setSocket(newSocket);
+
+    newSocket.on("getOnlineUsers", (userIds) => {
+      console.log("[Socket] Received online users:", userIds);
+      setOnlineUsers(userIds);
+    });
+  };
+
+  useEffect(() => {
+    if (token) {
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      checkAuth();
+    } else {
+      delete axios.defaults.headers.common["Authorization"];
+      setAuthUser(null);
+    }
+    // eslint-disable-next-line
+  }, [token]);
+
+  const value = {
+    axios,
+    authUser,
+    onlineUsers,
+    socket,
+    Login,
+    Logout,
+    updateProfile,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
